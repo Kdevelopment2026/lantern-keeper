@@ -3,13 +3,16 @@ import SwiftUI
 /// Watch length and the optional morning notification.
 struct PlanSheet: View {
     let flow: WatchFlowModel
+    /// Settings has its own notification row, so it opens this sheet without one.
+    var showsNotificationToggle = true
 
     @State private var plan: WatchPlan
     @Environment(\.dismiss) private var dismiss
     @Environment(\.theme) private var theme
 
-    init(flow: WatchFlowModel) {
+    init(flow: WatchFlowModel, showsNotificationToggle: Bool = true) {
         self.flow = flow
+        self.showsNotificationToggle = showsNotificationToggle
         _plan = State(initialValue: flow.harbour.plan)
     }
 
@@ -19,6 +22,7 @@ struct PlanSheet: View {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     DurationPicker(plan: $plan, format: flow.format, now: flow.now)
 
+                    if showsNotificationToggle {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
                         Toggle(isOn: notificationBinding) {
                             VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -38,6 +42,7 @@ struct PlanSheet: View {
                             NoticeText(message: notice)
                                 .accessibilityIdentifier("plan.notificationNotice")
                         }
+                    }
                     }
                 }
                 .padding(Spacing.screenMargin)

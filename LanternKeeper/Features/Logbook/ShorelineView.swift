@@ -7,9 +7,28 @@ struct ShorelineView: View {
     let format: WatchFormat
 
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Seven columns cannot hold large text; list the nights instead.
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    ForEach(summary.nights) { night in
+                        HStack(spacing: Spacing.s) {
+                            mark(for: night.status).frame(width: 24, height: 24)
+                            Text(format.weekday(night.day))
+                                .font(TypeScale.body)
+                                .foregroundStyle(theme.primaryText)
+                            Text(statusText(night.status))
+                                .font(TypeScale.caption)
+                                .foregroundStyle(theme.secondaryText)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(spokenNights))
+            } else {
             HStack(alignment: .bottom, spacing: 0) {
                 ForEach(summary.nights) { night in
                     VStack(spacing: Spacing.xxs) {
@@ -34,6 +53,7 @@ struct ShorelineView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(spokenNights))
+            }
 
             Text(totalLine)
                 .font(TypeScale.label)
@@ -58,6 +78,14 @@ struct ShorelineView: View {
             Circle()
                 .fill(theme.divider)
                 .frame(width: 5, height: 5)
+        }
+    }
+
+    private func statusText(_ status: WatchStatus?) -> String {
+        switch status {
+        case .completed: String(localized: "Completed")
+        case .interrupted: String(localized: "Ended early")
+        case .active, .none: String(localized: "No watch")
         }
     }
 

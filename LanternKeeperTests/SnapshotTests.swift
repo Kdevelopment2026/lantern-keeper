@@ -104,6 +104,33 @@ final class SnapshotTests: XCTestCase {
         }
     }
 
+    func testLogbookAndSettingsAtBothTextSizes() throws {
+        for size in [DynamicTypeSize.large, .accessibility3] {
+            let suffix = size == .large ? "large" : "accessibility3"
+            let (flow, clock) = try flowWithWatch()
+            clock.advance(by: 9 * hour)
+            flow.refresh()
+            if case .ended(let ended) = flow.screen { flow.saveReflection(.clear, note: "Quiet night.", for: ended) }
+            flow.dismissEnded()
+            flow.requestBegin()
+            flow.begin()
+            clock.advance(by: 90 * 60)
+            flow.endEarly()
+            flow.dismissEnded()
+
+            let logbook = flow.makeLogbook()
+            logbook.reload()
+            assertSnapshot(
+                LogbookView(model: logbook).themed(.night).environment(\.dynamicTypeSize, size).preferredColorScheme(.dark),
+                named: "logbook-\(suffix)"
+            )
+            assertSnapshot(
+                SettingsView(flow: flow).themed(.night).environment(\.dynamicTypeSize, size).preferredColorScheme(.dark),
+                named: "settings-\(suffix)"
+            )
+        }
+    }
+
     func testInterruptedWatch() throws {
         let (flow, clock) = try flowWithWatch()
         clock.advance(by: 2 * hour + 15 * 60)

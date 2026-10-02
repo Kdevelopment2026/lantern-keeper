@@ -107,7 +107,7 @@ struct SettingsView: View {
                 Text("Every completed and ended watch on this phone will be removed, including reflections and notes. This can’t be undone.")
             }
             .sheet(isPresented: $isPlanSheetPresented) {
-                PlanSheet(flow: flow).themed(.night)
+                PlanSheet(flow: flow, showsNotificationToggle: false).themed(.night)
             }
         }
         .tint(theme.primaryText)

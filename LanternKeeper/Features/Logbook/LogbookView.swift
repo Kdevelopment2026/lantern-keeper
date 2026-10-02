@@ -36,7 +36,7 @@ struct LogbookView: View {
                             .listRowBackground(theme.raisedBackground)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button("Delete") { model.pendingDeletion = entry }
-                                    .tint(theme.horizon)
+                                    .tint(theme.interrupted)
                             }
                             .accessibilityAction(named: Text("Delete")) { model.pendingDeletion = entry }
                     }
@@ -71,10 +71,6 @@ struct LogbookView: View {
         .presentationBackground(theme.background)
         .task { model.reload() }
     }
-}
-
-private extension Theme {
-    var horizon: Color { Palette.horizon }
 }
 
 struct LogbookRow: View {

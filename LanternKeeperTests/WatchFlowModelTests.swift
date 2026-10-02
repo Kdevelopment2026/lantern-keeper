@@ -52,13 +52,14 @@ final class WatchFlowModelTests: XCTestCase {
         XCTAssertEqual(try store.activeWatch()?.id, watch.id)
         XCTAssertEqual(announcements.count, 1)
 
-        // One haptic, played when the ignition completes.
+        // The ignition can be claimed once; its haptic plays on the first flash.
         XCTAssertTrue(flow.ignitionPending)
         XCTAssertTrue(haptics.played.isEmpty)
-        flow.completeIgnition()
-        flow.completeIgnition()
-        XCTAssertEqual(haptics.played, [.ignition])
+        XCTAssertTrue(flow.consumeIgnition())
+        XCTAssertFalse(flow.consumeIgnition())
         XCTAssertFalse(flow.ignitionPending)
+        flow.playIgnitionHaptic()
+        XCTAssertEqual(haptics.played, [.ignition])
     }
 
     func testRestoredWatchDoesNotReplayIgnition() throws {

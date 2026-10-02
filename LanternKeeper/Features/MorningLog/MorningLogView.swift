@@ -7,6 +7,7 @@ struct MorningLogView: View {
 
     @State private var reflection: MorningReflection?
     @State private var note = ""
+    static let noteLimit = 500
     @FocusState private var noteFocused: Bool
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -58,6 +59,9 @@ struct MorningLogView: View {
                     .focused($noteFocused)
                     .submitLabel(.done)
                     .onSubmit { noteFocused = false }
+                    .onChange(of: note) { _, newValue in
+                        if newValue.count > Self.noteLimit { note = String(newValue.prefix(Self.noteLimit)) }
+                    }
                     .accessibilityIdentifier("ended.note")
             }
 

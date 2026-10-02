@@ -222,10 +222,16 @@ final class WatchFlowModel {
         }
     }
 
-    /// The single confirming haptic, after the beam's first sweep (or at once with Reduce Motion).
-    func completeIgnition() {
-        guard ignitionPending else { return }
+    /// Claims the pending ignition. Returns true once per begun watch, so an interrupted
+    /// animation never replays on the next appearance.
+    func consumeIgnition() -> Bool {
+        guard ignitionPending else { return false }
         ignitionPending = false
+        return true
+    }
+
+    /// The single confirming haptic: on the first flash, or at once with Reduce Motion.
+    func playIgnitionHaptic() {
         haptics.play(.ignition)
     }
 

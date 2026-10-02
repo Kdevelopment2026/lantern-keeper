@@ -76,7 +76,7 @@ struct ActiveWatchView: View {
             guard ignitionStart != nil else { return }
             try? await Task.sleep(for: .seconds(IgnitionTimeline.hapticTime))
             guard !Task.isCancelled else { return }
-            flow.completeIgnition()
+            flow.playIgnitionHaptic()
         }
         .confirmationDialog("End this watch now?", isPresented: $isConfirmingEnd, titleVisibility: .visible) {
             Button("End watch") { flow.endEarly() }
@@ -97,9 +97,9 @@ struct ActiveWatchView: View {
 
     /// Plays the ignition only for a watch that has just begun, never on reopen.
     private func startIgnitionIfNeeded() {
-        guard flow.ignitionPending else { return }
+        guard flow.consumeIgnition() else { return }
         guard !reduceMotion, ambienceEnabled else {
-            flow.completeIgnition()
+            flow.playIgnitionHaptic()
             return
         }
         ignitionStart = Date()

@@ -19,12 +19,6 @@ enum Motion {
     static let ignitionLanternWarm: TimeInterval = 0.9
     static let ignitionBeamSweep: TimeInterval = 3.0
     static let ignitionControlsSettle: TimeInterval = 0.5
-    static var ignitionTotal: TimeInterval {
-        ignitionNightSettle + ignitionLanternWarm + ignitionBeamSweep + ignitionControlsSettle
-    }
-
-    /// Reduce Motion: unlit to fully lit, as one cross-fade.
-    static let ignitionReduced: TimeInterval = 0.5
 
     // MARK: Ambience (foreground only)
 
