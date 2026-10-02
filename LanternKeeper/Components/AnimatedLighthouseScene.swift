@@ -30,8 +30,14 @@ struct AnimatedLighthouseScene: View {
         Group {
             if reduceMotion || !ambienceEnabled {
                 LighthouseScene(state: state, highContrast: highContrast)
+            } else if !isOnScreen || scenePhase != .active {
+                // Off screen or locked: hold the current frame and let the timeline go.
+                // Toggling `paused:` on a live TimelineView does not reliably resume on
+                // every iOS version, so a fresh timeline is created on return instead.
+                let (sceneState, frame) = composition(at: Date())
+                LighthouseScene(state: sceneState, frame: frame, highContrast: highContrast)
             } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !isOnScreen || scenePhase != .active)) { context in
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
                     let (sceneState, frame) = composition(at: context.date)
                     LighthouseScene(state: sceneState, frame: frame, highContrast: highContrast)
                 }
