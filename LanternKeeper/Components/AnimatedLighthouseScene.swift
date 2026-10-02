@@ -30,10 +30,12 @@ struct AnimatedLighthouseScene: View {
         Group {
             if reduceMotion || !ambienceEnabled {
                 LighthouseScene(state: state, highContrast: highContrast)
-            } else if !isOnScreen || scenePhase != .active {
-                // Off screen or locked: hold the current frame and let the timeline go.
-                // Toggling `paused:` on a live TimelineView does not reliably resume on
-                // every iOS version, so a fresh timeline is created on return instead.
+            } else if !isOnScreen || scenePhase == .background {
+                // Off screen or in the background: hold the current frame and let the
+                // timeline go. Toggling `paused:` on a live TimelineView does not reliably
+                // resume on every iOS version, so a fresh timeline is created on return.
+                // The `.inactive` phase (the lock screen sliding away) keeps animating, so
+                // the scene is already moving when the phone is unlocked.
                 let (sceneState, frame) = composition(at: Date())
                 LighthouseScene(state: sceneState, frame: frame, highContrast: highContrast)
             } else {
