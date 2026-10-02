@@ -18,7 +18,7 @@ final class WatchStore {
     private let clock: any Clock
     private let calendar: Calendar
     private let save: SaveHandler
-    private static let logger = Logger(subsystem: "com.example.lanternkeeper", category: "lifecycle")
+    private static let logger = Logger(subsystem: "com.kayode.lanternkeeper", category: "lifecycle")
 
     init(
         context: ModelContext,
