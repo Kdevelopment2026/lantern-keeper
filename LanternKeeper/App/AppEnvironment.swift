@@ -15,6 +15,8 @@ final class AppEnvironment {
     /// False when the on-disk store could not open. Watches then refuse to start rather
     /// than pretend to be saved.
     let persistenceAvailable: Bool
+    /// Screen to open straight away (screenshots and UI tests only).
+    var launchScreen: LaunchArguments.Screen?
 
     init(
         clock: any Clock,
@@ -89,11 +91,20 @@ final class AppEnvironment {
             defaults.removePersistentDomain(forName: "uitest")
         }
         let clock: any Clock = arguments.now.map(FixedClock.init) ?? SystemClock()
-        return AppEnvironment(
+        let container = try! Persistence.makeContainer(url: storeURL)
+        if arguments.seedDemo {
+            try? DemoData.seed(into: container.mainContext, now: clock.now, calendar: .autoupdatingCurrent)
+        }
+        switch arguments.screen {
+        case .active: try? DemoData.seedActiveWatch(into: container.mainContext, now: clock.now)
+        case .morning: try? DemoData.seedCompletedWatch(into: container.mainContext, now: clock.now)
+        default: break
+        }
+        let environment = AppEnvironment(
             clock: clock,
             preferences: UserDefaultsPreferencesStore(defaults: defaults),
             format: .current,
-            container: try! Persistence.makeContainer(url: storeURL),
+            container: container,
             notifications: FakeNotificationService(
                 status: .notDetermined,
                 responseToRequest: arguments.notificationsDenied ? .denied : .allowed
@@ -101,16 +112,24 @@ final class AppEnvironment {
             orientation: FakeOrientationService(faceDownAfter: arguments.faceDownAfter),
             haptics: RecordingHapticsService()
         )
+        environment.launchScreen = arguments.screen
+        return environment
     }
 }
 
 /// Launch arguments understood by UI tests. Ignored in normal launches.
 struct LaunchArguments {
+    enum Screen: String {
+        case harbour, prompt, active, morning, logbook, settings
+    }
+
     let isUITest: Bool
     let reset: Bool
     let now: Date?
     let notificationsDenied: Bool
     let faceDownAfter: TimeInterval?
+    let seedDemo: Bool
+    let screen: Screen?
 
     init(_ arguments: [String]) {
         func value(after flag: String) -> String? {
@@ -122,5 +141,7 @@ struct LaunchArguments {
         now = value(after: "-uitest-now").flatMap { ISO8601DateFormatter().date(from: $0) }
         notificationsDenied = arguments.contains("-uitest-notifications-denied")
         faceDownAfter = value(after: "-uitest-facedown-after").flatMap(TimeInterval.init)
+        seedDemo = arguments.contains("-uitest-seed-demo")
+        screen = value(after: "-uitest-screen").flatMap(Screen.init(rawValue:))
     }
 }

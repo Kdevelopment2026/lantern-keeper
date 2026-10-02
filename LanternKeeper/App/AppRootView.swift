@@ -46,7 +46,13 @@ struct AppRootView: View {
                 .themed(.night)
         }
         .preferredColorScheme(.dark)
-        .task { flow.refresh() }
+        .task {
+            if let screen = environment.launchScreen {
+                flow.open(screen)
+            } else {
+                flow.refresh()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { flow.refresh() }
         }

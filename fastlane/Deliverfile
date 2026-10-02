@@ -1,0 +1,21 @@
+# App Store listing configuration. Copy lives in metadata/en-GB/, screenshots
+# in screenshots/en-GB/ (6.9-inch, 1320×2868, captured from the iPhone 17 Pro
+# Max simulator with `-uitest -uitest-seed-demo -uitest-screen <screen>` and
+# framed by compose_screenshot.swift).
+#
+#   fastlane ios listing
+#
+# What deliver cannot do with an API key: set the App Privacy label
+# (Data Not Collected) — that is answered once in the browser.
+
+app_identifier "com.kayode.lanternkeeper"
+team_id "SJW465977U"
+app_version "1.0"
+
+force true
+overwrite_screenshots true
+skip_binary_upload true
+submit_for_review false
+automatic_release false
+precheck_include_in_app_purchases false
+run_precheck_before_submit false

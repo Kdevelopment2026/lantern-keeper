@@ -264,6 +264,11 @@ final class WatchFlowHistoryTests: XCTestCase {
         XCTAssertFalse(flow.hapticsEnabled)
     }
 
+    func testLogbookModelIsReusedAcrossRenders() throws {
+        let (flow, _, _) = try makeFlow()
+        XCTAssertTrue(flow.makeLogbook() === flow.makeLogbook())
+    }
+
     func testDeleteAllHistoryKeepsActiveWatch() throws {
         let (flow, clock, _) = try makeFlow()
         flow.requestBegin()

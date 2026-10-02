@@ -1,0 +1,30 @@
+NO SIGN IN REQUIRED
+There is no account, no login and no demo credentials. The app has no server component at all.
+
+WHAT THE APP DOES
+Lantern Keeper is a timer-based ritual for putting the phone down at night. The user chooses a length (default 8 hours) or an end time, turns the phone face down, and the app records the start and planned end. In the morning it shows the time kept. It does not block other apps, does not use Screen Time APIs, and makes no sleep or health claims anywhere in the interface.
+
+FIRST LAUNCH
+A three-page introduction (Skip is always visible). Then the home screen: current time, the end time a watch would have, and "Begin watch".
+
+TO TRY A WATCH
+1. Tap "Begin watch". The next screen says "Turn your phone face down."
+2. Either turn the device face down for about a second, or tap "Start without turning over" (always visible — the gesture is optional).
+3. The lantern lights and the beam sweeps. The active screen shows the end time and time left. "End watch" asks for confirmation and logs the watch as ended early.
+4. To see a completed watch without waiting: tap "End watch" → "End watch". The result screen offers an optional reflection (Clear / Steady / Tired) and a note. These are saved locally.
+
+OTHER SCREENS
+- "Open logbook": the last seven nights and every past watch; swipe to delete an entry.
+- "Settings": default watch length, optional morning notification, haptics, privacy statement, "Delete all history" (confirmed, irreversible), version.
+
+PERMISSIONS
+Notifications only, and only if the user switches "Morning notification" on. Denying it changes nothing else. Device motion (gravity) is read while the face-down screen is open, needs no permission, and is never stored.
+
+IT WORKS OFFLINE
+Please feel free to test in airplane mode. There is no networking code in this build.
+
+PRIVACY
+No analytics, no tracking, no advertising, no third-party SDKs. All data is stored on device with SwiftData. The privacy label is Data Not Collected. PrivacyInfo.xcprivacy declares UserDefaults (CA92.1) for preferences only.
+
+ACCESSIBILITY
+VoiceOver labels for every control and for the lighthouse state ("Lighthouse lit. Watch ends at 7:00 am."), Dynamic Type through accessibility sizes, Reduce Motion (still scene), Increased Contrast, 44 pt targets.

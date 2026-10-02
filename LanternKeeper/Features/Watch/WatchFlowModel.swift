@@ -78,6 +78,7 @@ final class WatchFlowModel {
     @ObservationIgnored private let persistenceAvailable: Bool
     @ObservationIgnored private let announce: @MainActor (String) -> Void
     @ObservationIgnored private(set) var notificationWork: Task<Void, Never>?
+    @ObservationIgnored private var cachedLogbook: LogbookModel?
 
     init(
         store: WatchStore,
@@ -129,8 +130,26 @@ final class WatchFlowModel {
         }
     }
 
+    /// Jumps to a screen for screenshots. Onboarding is marked done; stored state decides
+    /// between harbour, active and morning, so this only steers the rest.
+    func open(_ screen: LaunchArguments.Screen) {
+        completeOnboarding()
+        refresh()
+        switch screen {
+        case .harbour, .active, .morning: break
+        case .prompt: requestBegin()
+        case .logbook: isLogbookPresented = true
+        case .settings: isSettingsPresented = true
+        }
+    }
+
+    /// One logbook model for the flow's lifetime. A sheet's content closure runs on every
+    /// root re-render, so building a fresh model there would show an empty list.
     func makeLogbook() -> LogbookModel {
-        LogbookModel(store: watchStore, clock: clock, format: format)
+        if let logbook = cachedLogbook { return logbook }
+        let logbook = LogbookModel(store: watchStore, clock: clock, format: format)
+        cachedLogbook = logbook
+        return logbook
     }
 
     var store: WatchStore { watchStore }

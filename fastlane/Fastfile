@@ -1,0 +1,388 @@
+# Fastfile
+#
+# Build, sign and upload Lantern Keeper. Authentication is the App Store Connect API
+# key described in fastlane/api_key.json (git-ignored, never committed); the
+# private .p8 itself stays in ~/.appstoreconnect.
+#
+#   fastlane ios status      — app record + builds on App Store Connect
+#   fastlane ios create_app  — register bundle id + create the app record
+#   fastlane ios test        — regenerate project, run unit tests
+#   fastlane ios build       — archive a signed App Store .ipa into build/
+#   fastlane ios upload      — push build/LanternKeeper.ipa to TestFlight
+#   fastlane ios beta        — test + build + upload
+
+APP_BUNDLE_ID = "com.kayode.lanternkeeper".freeze
+APP_NAME = ENV.fetch("LANTERNKEEPER_APP_NAME", "Lantern Keeper").freeze
+TEAM_ID = "SJW465977U".freeze
+API_KEY_PATH = File.join(__dir__, "api_key.json").freeze
+PROJECT = File.expand_path("../LanternKeeper.xcodeproj", __dir__).freeze
+SCHEME = "Lantern Keeper".freeze
+BUILD_DIR = File.expand_path("../build", __dir__).freeze
+
+def api_key_config
+  UI.user_error!("No #{API_KEY_PATH}. Copy api_key.json.example and fill it in.") unless File.exist?(API_KEY_PATH)
+  JSON.parse(File.read(API_KEY_PATH))
+end
+
+platform :ios do
+  # Every lane that talks to Apple starts here. Sets lane_context so gym,
+  # pilot and deliver all pick the key up without being told.
+  private_lane :authenticate do
+    config = api_key_config
+    app_store_connect_api_key(
+      key_id: config["key_id"],
+      issuer_id: config["issuer_id"],
+      key_filepath: File.expand_path(config["key_filepath"]),
+      in_house: config.fetch("in_house", false)
+    )
+  end
+
+  desc "List every app record this key can see (bundle id — name)"
+  lane :apps do
+    authenticate
+    require "spaceship"
+    Spaceship::ConnectAPI::App.all.each { |a| UI.message("#{a.bundle_id}  —  #{a.name}  (SKU #{a.sku})") }
+  end
+
+  desc "Show whether the app record exists and which builds Connect has"
+  lane :status do
+    authenticate
+    require "spaceship"
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID)
+    if app.nil?
+      UI.important("No app record for #{APP_BUNDLE_ID}. Run `fastlane ios create_app`.")
+      next
+    end
+    UI.success("App: #{app.name} (#{app.id}) — #{app.bundle_id}, SKU #{app.sku}")
+    builds = Spaceship::ConnectAPI::Build.all(app_id: app.id)
+    if builds.empty?
+      UI.message("Connect has no builds yet.")
+    else
+      builds.sort_by { |b| b.version.to_i }.each do |b|
+        UI.message("build #{b.version} | #{b.processing_state} | uploaded #{b.uploaded_date}")
+      end
+      UI.important("Highest build number: #{builds.map { |b| b.version.to_i }.max}. CURRENT_PROJECT_VERSION in project.yml must be higher before the next archive.")
+    end
+    app.get_app_store_versions.each do |v|
+      UI.message("version #{v.version_string} | #{v.app_store_state}")
+    end
+  end
+
+  desc "Register the bundle id and create the App Store Connect app record"
+  # Both halves go through the App Store Connect API so no Apple ID login is
+  # needed: the bundle id via the bundleIds endpoint, the app record directly.
+  lane :create_app do
+    authenticate
+    require "spaceship"
+    existing = Spaceship::ConnectAPI::BundleId.all(filter: { identifier: APP_BUNDLE_ID })
+                                             .find { |b| b.identifier == APP_BUNDLE_ID }
+    if existing
+      UI.success("Bundle id already registered: #{existing.identifier} (#{existing.name})")
+    else
+      bundle = Spaceship::ConnectAPI::BundleId.create(name: "Lantern Keeper", platform: "IOS", identifier: APP_BUNDLE_ID)
+      UI.success("Registered bundle id #{bundle.identifier}")
+    end
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID)
+    if app
+      UI.success("App record already exists: #{app.name} (#{app.id})")
+    else
+      app = Spaceship::ConnectAPI::App.create(
+        name: APP_NAME,
+        version_string: "1.0",
+        sku: "LANTERNKEEPER-IOS-001",
+        primary_locale: "en-GB",
+        bundle_id: APP_BUNDLE_ID,
+        platforms: ["IOS"]
+      )
+      UI.success("Created app record #{app.name} (#{app.id})")
+    end
+  end
+
+  desc "Regenerate the Xcode project and run the unit tests"
+  lane :test do
+    sh("cd .. && xcodegen generate")
+    run_tests(
+      project: PROJECT,
+      scheme: SCHEME,
+      devices: ["iPhone 17 Pro"],
+      skip_slack: true
+    )
+  end
+
+  desc "Archive a signed App Store build into build/"
+  # The archive step signs with the development identity via automatic
+  # signing and the API key. The export step cannot: creating a cloud-managed
+  # distribution profile needs an Admin key, so sigh fetches an ordinary App
+  # Store profile for the bundle id and export re-signs manually with the
+  # Apple Distribution certificate in the login keychain.
+  lane :build do
+    authenticate
+    config = api_key_config
+    sh("cd .. && xcodegen generate")
+
+    profile_path = get_provisioning_profile(
+      app_identifier: APP_BUNDLE_ID,
+      output_path: BUILD_DIR,
+      filename: "AppStore_#{APP_BUNDLE_ID}.mobileprovision",
+      readonly: false
+    )
+    profile_name = lane_context[SharedValues::SIGH_NAME]
+    UI.message("Using profile #{profile_name} (#{profile_path})")
+
+    auth_args = "-allowProvisioningUpdates " \
+                "-authenticationKeyPath #{File.expand_path(config['key_filepath']).shellescape} " \
+                "-authenticationKeyID #{config['key_id']} " \
+                "-authenticationKeyIssuerID #{config['issuer_id']}"
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: BUILD_DIR,
+      output_name: "Lantern Keeper",
+      xcargs: auth_args,
+      export_options: {
+        method: "app-store",
+        signingStyle: "manual",
+        signingCertificate: "Apple Distribution",
+        teamID: TEAM_ID,
+        provisioningProfiles: { APP_BUNDLE_ID => profile_name },
+        uploadSymbols: true
+      }
+    )
+  end
+
+  desc "Upload the archived ipa to TestFlight"
+  lane :upload do
+    authenticate
+    upload_to_testflight(
+      ipa: File.join(BUILD_DIR, "LanternKeeper.ipa"),
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Test, build and upload to TestFlight"
+  lane :beta do
+    test
+    build
+    upload
+  end
+
+  desc "Check the listing copy is complete and within Apple's limits"
+  lane :check_listing do
+    meta = File.join(__dir__, "metadata")
+    limits = {
+      "en-GB/name.txt" => 30, "en-GB/subtitle.txt" => 30, "en-GB/promotional_text.txt" => 170,
+      "en-GB/description.txt" => 4000, "en-GB/keywords.txt" => 100, "en-GB/release_notes.txt" => 4000,
+      "en-GB/support_url.txt" => nil, "en-GB/privacy_url.txt" => nil,
+      "review_information/first_name.txt" => nil, "review_information/last_name.txt" => nil,
+      "review_information/email_address.txt" => nil, "review_information/notes.txt" => nil,
+    }
+    problems = []
+    limits.each do |relative, limit|
+      path = File.join(meta, relative)
+      text = File.exist?(path) ? File.read(path).strip : ""
+      problems << "#{relative} is missing or empty" and next if text.empty?
+      problems << "#{relative} is #{text.length} characters, over #{limit}" and next if limit && text.length > limit
+      UI.success("#{relative}#{limit ? " — #{text.length}/#{limit}" : ""}")
+    end
+    phone = File.join(meta, "review_information", "phone_number.txt")
+    UI.important("review_information/phone_number.txt is empty — App Review needs it before submission") unless File.exist?(phone) && !File.read(phone).strip.empty?
+    shots = Dir.glob(File.join(__dir__, "screenshots", "*", "*.png"))
+    UI.success("#{shots.count} screenshots")
+    problems << "no screenshots" if shots.empty?
+    UI.user_error!("Listing is not ready:\n" + problems.join("\n")) if problems.any?
+  end
+
+  desc "Upload metadata, screenshots and the age rating to App Store Connect"
+  # App Review contact details are only sent once a phone number is present;
+  # Apple rejects the whole review-information record without one, and
+  # deliver would abort before the screenshots went up.
+  lane :listing do
+    check_listing
+    authenticate
+    review_dir = File.join(__dir__, "metadata", "review_information")
+    phone = File.join(review_dir, "phone_number.txt")
+    has_phone = File.exist?(phone) && !File.read(phone).strip.empty?
+    parked = File.join(__dir__, ".review_information.parked")
+    FileUtils.mv(review_dir, parked) unless has_phone
+    begin
+      # Categories and screenshots go through the API directly below: deliver's
+      # category patch on a fresh app record fails with "No data", and its
+      # screenshot upload is unreliable.
+      deliver(app_rating_config_path: nil, skip_screenshots: true)
+    ensure
+      FileUtils.mv(parked, review_dir) if File.exist?(parked)
+    end
+    categories
+    screenshots
+    age_rating
+    UI.important("Review contact not uploaded: fill review_information/phone_number.txt and run again.") unless has_phone
+  end
+
+  def asc_token
+    config = api_key_config
+    require "spaceship"
+    Spaceship::ConnectAPI::Token.create(
+      key_id: config["key_id"], issuer_id: config["issuer_id"],
+      filepath: File.expand_path(config["key_filepath"]), in_house: false
+    ).text
+  end
+
+  def asc(method, path, body = nil)
+    require "net/http"
+    uri = URI("https://api.appstoreconnect.apple.com#{path}")
+    request = { get: Net::HTTP::Get, post: Net::HTTP::Post, patch: Net::HTTP::Patch, delete: Net::HTTP::Delete }[method].new(uri)
+    request["Authorization"] = "Bearer #{asc_token}"
+    request["Content-Type"] = "application/json"
+    request.body = JSON.generate(body) if body
+    response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
+    json = response.body.to_s.empty? ? {} : JSON.parse(response.body)
+    unless response.code.to_i.between?(200, 299)
+      detail = (json["errors"] || []).map { |e| "#{e['code']}: #{e['detail']}" }.join("; ")
+      UI.user_error!("#{method.to_s.upcase} #{path} → #{response.code} #{detail}")
+    end
+    json
+  end
+
+  PRIMARY_CATEGORY = "HEALTH_AND_FITNESS".freeze
+  SECONDARY_CATEGORY = "LIFESTYLE".freeze
+
+  desc "Set primary and secondary categories through the API"
+  lane :categories do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    infos = asc(:get, "/v1/apps/#{app.id}/appInfos")["data"]
+    info = infos.find { |i| i["attributes"]["appStoreState"] == "PREPARE_FOR_SUBMISSION" } || infos.first
+    asc(:patch, "/v1/appInfos/#{info['id']}", {
+      data: {
+        type: "appInfos", id: info["id"],
+        relationships: {
+          primaryCategory: { data: { type: "appCategories", id: PRIMARY_CATEGORY } },
+          secondaryCategory: { data: { type: "appCategories", id: SECONDARY_CATEGORY } }
+        }
+      }
+    })
+    UI.success("categories: #{PRIMARY_CATEGORY} / #{SECONDARY_CATEGORY}")
+  end
+
+  desc "Upload screenshots directly via Spaceship (replaces whatever is there)"
+  lane :screenshots do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    version = app.get_edit_app_store_version || UI.user_error!("No editable version")
+    version.get_app_store_version_localizations.each do |loc|
+      dir = File.join(__dir__, "screenshots", loc.locale)
+      files = Dir[File.join(dir, "iphone69_*.png")].sort
+      next if files.empty?
+      set = loc.get_app_screenshot_sets.find { |s| s.screenshot_display_type == "APP_IPHONE_67" } ||
+            loc.create_app_screenshot_set(attributes: { screenshotDisplayType: "APP_IPHONE_67" })
+      (set.app_screenshots || []).each(&:delete!)
+      files.each do |f|
+        Spaceship::ConnectAPI::AppScreenshot.create(app_screenshot_set_id: set.id, path: f, wait_for_processing: true)
+        UI.message("#{loc.locale}: uploaded #{File.basename(f)}")
+      end
+    end
+    UI.success("screenshots uploaded")
+  end
+
+  desc "Set the age rating questionnaire through the API (deliver's key list is out of date)"
+  lane :age_rating do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    infos = asc(:get, "/v1/apps/#{app.id}/appInfos")["data"]
+    info = infos.find { |i| i["attributes"]["appStoreState"] == "PREPARE_FOR_SUBMISSION" } || infos.first
+    declaration = asc(:get, "/v1/appInfos/#{info['id']}/ageRatingDeclaration")["data"]
+    desired = JSON.parse(File.read(File.expand_path("rating.json", __dir__)))
+    known = declaration["attributes"].keys
+    attributes = desired.select { |k, _| known.include?(k) }
+    unknown = desired.keys - known
+    UI.important("ignored (not on this API): #{unknown.join(', ')}") if unknown.any?
+    asc(:patch, "/v1/ageRatingDeclarations/#{declaration['id']}", {
+      data: { type: "ageRatingDeclarations", id: declaration["id"], attributes: attributes }
+    })
+    UI.success("age rating set")
+  end
+
+  desc "Attach the newest processed build to the editable version"
+  lane :attach_build do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    version = app.get_edit_app_store_version || UI.user_error!("No editable version")
+    builds = Spaceship::ConnectAPI::Build.all(app_id: app.id).select { |b| b.processing_state == "VALID" }
+    build = builds.max_by { |b| b.version.to_i } || UI.user_error!("No processed build yet — try again in a few minutes")
+    version.select_build(build_id: build.id)
+    UI.success("Version #{version.version_string} now uses build #{build.version}")
+  end
+
+  desc "Make the app available in every territory, including ones Apple adds later"
+  lane :availability do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    territories = asc(:get, "/v1/territories?limit=200")["data"].map { |t| t["id"] }
+    asc(:post, "/v2/appAvailabilities", {
+      data: { type: "appAvailabilities",
+              attributes: { availableInNewTerritories: true },
+              relationships: {
+                app: { data: { type: "apps", id: app.id } },
+                territoryAvailabilities: { data: territories.map.with_index { |_, i| { type: "territoryAvailabilities", id: "${t#{i}}" } } }
+              } },
+      included: territories.map.with_index { |t, i|
+        { type: "territoryAvailabilities", id: "${t#{i}}", attributes: { available: true },
+          relationships: { territory: { data: { type: "territories", id: t } } } }
+      }
+    })
+    UI.success("available in #{territories.count} territories, including new ones")
+  end
+
+  desc "Read back the app price schedule and territory availability (read-only)"
+  lane :price_check do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    sched = asc(:get, "/v1/apps/#{app.id}/appPriceSchedule?include=baseTerritory")
+    base = sched.dig("data", "relationships", "baseTerritory", "data", "id")
+    UI.message("base territory: #{base.inspect}")
+    schedule_id = sched.dig("data", "id")
+    manual = asc(:get, "/v1/appPriceSchedules/#{schedule_id}/manualPrices?include=appPricePoint&limit=5")
+    (manual["included"] || []).select { |i| i["type"] == "appPricePoints" }.each do |p|
+      UI.message("manual price: #{p.dig('attributes', 'customerPrice')} (proceeds #{p.dig('attributes', 'proceeds')})")
+    end
+    %w[USA DEU AUS].each do |t|
+      auto = asc(:get, "/v1/appPriceSchedules/#{schedule_id}/automaticPrices?include=appPricePoint&filter[territory]=#{t}&limit=1")
+      (auto["included"] || []).each { |p| UI.message("#{t}: #{p.dig('attributes', 'customerPrice')}") }
+    end
+    avail = begin
+      asc(:get, "/v1/apps/#{app.id}/appAvailabilityV2?include=territoryAvailabilities")
+    rescue StandardError => e
+      UI.important("availability: not set (#{e.message})")
+      nil
+    end
+    if avail
+      rows = (avail["included"] || []).select { |i| i["type"] == "territoryAvailabilities" }
+      UI.message("availableInNewTerritories: #{avail.dig('data', 'attributes', 'availableInNewTerritories').inspect}")
+      UI.message("territories available: #{rows.count { |x| x.dig('attributes', 'available') }} of #{rows.count}")
+    end
+  end
+
+  desc "Read the listing back from App Store Connect"
+  lane :qa do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    version = app.get_edit_app_store_version || UI.user_error!("No editable version")
+    UI.important("Version #{version.version_string} — #{version.app_store_state}, copyright #{version.copyright.inspect}, build #{version.build&.version.inspect}")
+    version.get_app_store_version_localizations.each do |loc|
+      UI.message("#{loc.locale}: desc=#{loc.description&.length}ch keywords=#{loc.keywords.inspect} promo=#{loc.promotional_text&.length}ch support=#{loc.support_url.inspect}")
+      loc.get_app_screenshot_sets.each { |s| UI.message("  screenshots #{s.screenshot_display_type}: #{s.app_screenshots.count}") }
+    end
+    (app.fetch_edit_app_info || app.fetch_live_app_info)&.get_app_info_localizations&.each do |loc|
+      UI.message("#{loc.locale}: name=#{loc.name.inspect} subtitle=#{loc.subtitle.inspect} privacy=#{loc.privacy_policy_url.inspect}")
+    end
+  end
+end

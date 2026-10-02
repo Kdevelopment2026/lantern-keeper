@@ -11,3 +11,10 @@ build/
 xcuserdata/
 *.xcuserstate
 .DS_Store
+
+# fastlane — the API key descriptor and build outputs never get committed.
+fastlane/api_key.json
+fastlane/report.xml
+fastlane/README.md
+fastlane/test_output/
+fastlane/screenshots/raw/
