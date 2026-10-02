@@ -402,6 +402,61 @@ platform :ios do
     end
   end
 
+  desc "Read back the App Review contact for version 1.0"
+  lane :review_info do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    version = asc(:get, "/v1/apps/#{app.id}/appStoreVersions?filter[platform]=IOS&limit=1")["data"].first
+    UI.message("version #{version.dig('attributes', 'versionString')} | #{version.dig('attributes', 'appStoreState')}")
+    detail = asc(:get, "/v1/appStoreVersions/#{version['id']}/appStoreReviewDetail")["data"]
+    UI.user_error!("no App Review contact set") unless detail
+    a = detail["attributes"]
+    UI.message("review contact: #{a['contactFirstName']} #{a['contactLastName']} | phone #{a['contactPhone'].inspect} | email #{a['contactEmail']}")
+    UI.user_error!("review contact phone is empty") if a["contactPhone"].to_s.strip.empty?
+  end
+
+  desc "Submit version 1.0 for App Review through the Review Submission API"
+  lane :submit do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    version = asc(:get, "/v1/apps/#{app.id}/appStoreVersions?filter[platform]=IOS&limit=1")["data"].first
+    subs = asc(:get, "/v1/apps/#{app.id}/reviewSubmissions?filter[platform]=IOS&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES")["data"]
+    sub = subs.first
+    if sub.nil?
+      sub = asc(:post, "/v1/reviewSubmissions", { data: { type: "reviewSubmissions", attributes: { platform: "IOS" },
+                                                           relationships: { app: { data: { type: "apps", id: app.id } } } } })["data"]
+      UI.message("created review submission #{sub['id']}")
+    else
+      UI.message("review submission #{sub['id']} is #{sub.dig('attributes', 'state')}")
+    end
+    items = asc(:get, "/v1/reviewSubmissions/#{sub['id']}/items")["data"]
+    if items.empty?
+      asc(:post, "/v1/reviewSubmissionItems", { data: { type: "reviewSubmissionItems",
+            relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: sub["id"] } },
+                             appStoreVersion: { data: { type: "appStoreVersions", id: version["id"] } } } } })
+      UI.message("added version #{version.dig('attributes', 'versionString')} to the submission")
+    end
+    state = sub.dig("attributes", "state")
+    if %w[WAITING_FOR_REVIEW IN_REVIEW].include?(state)
+      UI.success("already submitted: #{state}")
+      next
+    end
+    result = asc(:patch, "/v1/reviewSubmissions/#{sub['id']}", { data: { type: "reviewSubmissions", id: sub["id"], attributes: { submitted: true } } })
+    UI.success("submitted for review: #{result.dig('data', 'attributes', 'state')}")
+  end
+
+  desc "Declare the privacy label as Data Not Collected and publish it"
+  lane :privacy do
+    authenticate
+    upload_app_privacy_details_to_app_store(
+      app_identifier: APP_BUNDLE_ID,
+      json_path: File.expand_path("app_privacy_details.json", __dir__),
+      skip_publish: false
+    )
+  end
+
   desc "Read the listing back from App Store Connect"
   lane :qa do
     require "spaceship"
