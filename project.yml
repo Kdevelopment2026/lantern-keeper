@@ -37,7 +37,6 @@ targets:
         UIRequiredDeviceCapabilities: [arm64]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIUserInterfaceStyle: Dark
-        NSMotionUsageDescription: Lantern Keeper can notice when you turn your phone face down to begin a watch. Motion data stays on this device and is never saved.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.lanternkeeper

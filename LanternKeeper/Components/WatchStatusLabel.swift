@@ -38,7 +38,7 @@ struct WatchStatusLabel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(WatchStatusText.title(for: state))
-                .font(TypeScale.title)
+                .font(state == .dawn ? TypeScale.reflectiveHeading : TypeScale.title)
                 .foregroundStyle(theme.primaryText)
             if let detail {
                 Text(detail)

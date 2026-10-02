@@ -24,8 +24,6 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSMotionUsageDescription</key>
-	<string>Lantern Keeper can notice when you turn your phone face down to begin a watch. Motion data stays on this device and is never saved.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
