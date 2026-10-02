@@ -60,6 +60,8 @@ final class WatchFlowModel {
     private(set) var orientationNotice: String?
     private(set) var notificationNotice: String?
     private(set) var morningNotificationEnabled: Bool
+    /// Set when a watch has just begun and its ignition (and haptic) has not played yet.
+    private(set) var ignitionPending = false
     var isPlanSheetPresented = false
 
     let harbour: HarbourModel
@@ -144,7 +146,7 @@ final class WatchFlowModel {
             harbour.choose(harbour.plan)
             saveError = nil
             screen = .active(ActiveWatch(session))
-            haptics.play(.ignition)
+            ignitionPending = true
             announce(String(localized: "Watch started. Lighthouse lit. Watch ends at \(format.time(session.targetEndAt))."))
             if morningNotificationEnabled {
                 let target = session.targetEndAt
@@ -158,6 +160,13 @@ final class WatchFlowModel {
         } catch {
             saveError = Copy.saveFailed
         }
+    }
+
+    /// The single confirming haptic, after the beam's first sweep (or at once with Reduce Motion).
+    func completeIgnition() {
+        guard ignitionPending else { return }
+        ignitionPending = false
+        haptics.play(.ignition)
     }
 
     func orientationUnavailable() {

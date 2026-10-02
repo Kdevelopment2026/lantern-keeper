@@ -7,11 +7,12 @@ struct FaceDownPromptView: View {
     let orientation: any OrientationService
 
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let end = flow.harbour.proposedEnd(at: flow.now)
         ScreenScaffold {
-            LighthouseScene(state: .idle, highContrast: theme.isHighContrast)
+            AnimatedLighthouseScene(state: .idle, reduceMotion: reduceMotion, highContrast: theme.isHighContrast)
         } top: {
             QuietActionButton("Not now", action: flow.cancelPrompt)
                 .accessibilityIdentifier("prompt.notNow")

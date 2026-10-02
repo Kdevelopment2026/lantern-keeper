@@ -49,9 +49,28 @@ final class WatchFlowModelTests: XCTestCase {
 
         guard case .active(let watch) = flow.screen else { return XCTFail("Expected active watch") }
         XCTAssertEqual(watch.targetEndAt, clock.now.addingTimeInterval(8 * hour))
-        XCTAssertEqual(haptics.played, [.ignition])
         XCTAssertEqual(try store.activeWatch()?.id, watch.id)
         XCTAssertEqual(announcements.count, 1)
+
+        // One haptic, played when the ignition completes.
+        XCTAssertTrue(flow.ignitionPending)
+        XCTAssertTrue(haptics.played.isEmpty)
+        flow.completeIgnition()
+        flow.completeIgnition()
+        XCTAssertEqual(haptics.played, [.ignition])
+        XCTAssertFalse(flow.ignitionPending)
+    }
+
+    func testRestoredWatchDoesNotReplayIgnition() throws {
+        let container = try Persistence.makeContainer(inMemory: true)
+        let (first, _) = try makeFlow(container: container)
+        first.requestBegin()
+        first.begin()
+
+        let (relaunched, _) = try makeFlow(container: container)
+        relaunched.refresh()
+
+        XCTAssertFalse(relaunched.ignitionPending)
     }
 
     func testBeginOutsidePromptDoesNothing() throws {
@@ -129,7 +148,7 @@ final class WatchFlowModelTests: XCTestCase {
         guard case .ended(let ended) = flow.screen else { return XCTFail("Expected ended screen") }
         XCTAssertTrue(ended.completed)
         XCTAssertEqual(ended.duration, 8 * hour)
-        XCTAssertEqual(haptics.played, [.ignition, .completion])
+        XCTAssertEqual(haptics.played, [.completion])
 
         flow.dismissEnded()
         XCTAssertEqual(flow.screen, .harbour)

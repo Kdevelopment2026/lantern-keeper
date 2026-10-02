@@ -7,7 +7,11 @@ struct ActiveWatchView: View {
 
     @State private var isConfirmingEnd = false
     @State private var isQuiet = false
+    @State private var ignitionStart: Date?
+    @State private var controlsVisible = true
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.lighthouseAmbienceEnabled) private var ambienceEnabled
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { _ in
@@ -17,7 +21,12 @@ struct ActiveWatchView: View {
             let remaining = watch.targetEndAt.timeIntervalSince(now)
 
             ScreenScaffold {
-                LighthouseScene(state: state, highContrast: theme.isHighContrast)
+                AnimatedLighthouseScene(
+                    state: state,
+                    reduceMotion: reduceMotion,
+                    highContrast: theme.isHighContrast,
+                    ignitionStart: ignitionStart
+                )
             } top: {
                 EmptyView()
             } bottom: {
@@ -48,6 +57,7 @@ struct ActiveWatchView: View {
                     NoticeText(message: error)
                 }
 
+                Group {
                 if isQuiet {
                     QuietActionButton("Show watch controls") { isQuiet = false }
                         .accessibilityIdentifier("active.showControls")
@@ -57,7 +67,16 @@ struct ActiveWatchView: View {
                     SecondaryActionButton("End watch") { isConfirmingEnd = true }
                         .accessibilityIdentifier("active.endWatch")
                 }
+                }
+                .opacity(controlsVisible ? 1 : 0)
             }
+        }
+        .onAppear(perform: startIgnitionIfNeeded)
+        .task(id: ignitionStart) {
+            guard ignitionStart != nil else { return }
+            try? await Task.sleep(for: .seconds(IgnitionTimeline.hapticTime))
+            guard !Task.isCancelled else { return }
+            flow.completeIgnition()
         }
         .confirmationDialog("End this watch now?", isPresented: $isConfirmingEnd, titleVisibility: .visible) {
             Button("End watch") { flow.endEarly() }
@@ -73,6 +92,20 @@ struct ActiveWatchView: View {
             }
             guard !Task.isCancelled else { return }
             flow.refresh()
+        }
+    }
+
+    /// Plays the ignition only for a watch that has just begun, never on reopen.
+    private func startIgnitionIfNeeded() {
+        guard flow.ignitionPending else { return }
+        guard !reduceMotion, ambienceEnabled else {
+            flow.completeIgnition()
+            return
+        }
+        ignitionStart = Date()
+        controlsVisible = false
+        withAnimation(.easeOut(duration: Motion.ignitionControlsSettle).delay(IgnitionTimeline.hapticTime)) {
+            controlsVisible = true
         }
     }
 }

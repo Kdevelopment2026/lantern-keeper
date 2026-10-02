@@ -6,11 +6,12 @@ struct WatchEndedView: View {
     let ended: WatchFlowModel.EndedWatch
 
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let state: LighthouseSceneState = ended.completed ? .dawn : .interrupted
         ScreenScaffold {
-            LighthouseScene(state: state, highContrast: theme.isHighContrast)
+            AnimatedLighthouseScene(state: state, reduceMotion: reduceMotion, highContrast: theme.isHighContrast)
         } top: {
             EmptyView()
         } bottom: {

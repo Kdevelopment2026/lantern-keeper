@@ -60,3 +60,58 @@ final class WatchFormatTests: XCTestCase {
         XCTAssertEqual(format.remaining(5 * hour + 11 * 60 + 1), "5 hrs, 12 min")
     }
 }
+
+final class LighthouseMotionTests: XCTestCase {
+    func testAmbienceIsDeterministicAndBounded() {
+        for time in stride(from: 0.0, through: 120, by: 0.7) {
+            let frame = LighthouseAmbience.frame(for: .watching(progress: 0.5), at: time)
+            XCTAssertEqual(frame, LighthouseAmbience.frame(for: .watching(progress: 0.5), at: time))
+            XCTAssertLessThanOrEqual(abs(frame.beamAngle - Motion.beamRestAngle), Motion.beamSweepAmplitude + 1e-9)
+            XCTAssertTrue((0..<1).contains(frame.seaPhase))
+            XCTAssertTrue((0..<1).contains(frame.fogOffset))
+        }
+    }
+
+    func testIdleAmbienceNeverLightsTheLantern() {
+        for time in stride(from: 0.0, through: 60, by: 1.3) {
+            let frame = LighthouseAmbience.frame(for: .idle, at: time)
+            XCTAssertEqual(frame.lanternIntensity, 0)
+            XCTAssertEqual(frame.beamOpacity, 0)
+        }
+    }
+
+    func testIgnitionOrder() {
+        let ambient = LighthouseAmbience.frame(for: .watching(progress: 0), at: 0)
+
+        let start = IgnitionTimeline.frame(elapsed: 0, ambient: ambient)
+        XCTAssertEqual(start.nightDepth, 0)
+        XCTAssertEqual(start.lanternIntensity, 0)
+        XCTAssertEqual(start.beamOpacity, 0)
+
+        // Night settles before the lantern warms; the lantern is full before the sweep.
+        let settled = IgnitionTimeline.frame(elapsed: IgnitionTimeline.lanternStart, ambient: ambient)
+        XCTAssertEqual(settled.nightDepth, 1, accuracy: 1e-9)
+        XCTAssertEqual(settled.lanternIntensity, 0, accuracy: 1e-9)
+
+        let warmed = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepStart, ambient: ambient)
+        XCTAssertEqual(warmed.lanternIntensity, 1, accuracy: 1e-9)
+        XCTAssertEqual(warmed.beamOpacity, 0, accuracy: 1e-9)
+        XCTAssertEqual(warmed.beamAngle, IgnitionTimeline.sweepStartAngle, accuracy: 1e-9)
+
+        let done = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepEnd, ambient: ambient)
+        XCTAssertEqual(done.beamAngle, ambient.beamAngle, accuracy: 1e-9)
+        XCTAssertEqual(done.beamOpacity, ambient.beamOpacity, accuracy: 1e-9)
+        XCTAssertTrue(IgnitionTimeline.isComplete(elapsed: IgnitionTimeline.sweepEnd))
+    }
+
+    func testLanternWarmsMonotonically() {
+        let ambient = LighthouseFrame.resting(for: .watching(progress: 0))
+        var previous = -1.0
+        for step in 0...40 {
+            let elapsed = IgnitionTimeline.sweepEnd * Double(step) / 40
+            let intensity = IgnitionTimeline.frame(elapsed: elapsed, ambient: ambient).lanternIntensity
+            XCTAssertGreaterThanOrEqual(intensity, previous)
+            previous = intensity
+        }
+    }
+}

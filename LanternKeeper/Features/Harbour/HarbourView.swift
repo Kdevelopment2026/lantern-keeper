@@ -7,12 +7,13 @@ struct HarbourView: View {
     var onChangePlan: () -> Void = {}
 
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
             let now = model.now
             ScreenScaffold {
-                LighthouseScene(state: .idle, highContrast: theme.isHighContrast)
+                AnimatedLighthouseScene(state: .idle, reduceMotion: reduceMotion, highContrast: theme.isHighContrast)
             } top: {
                 Text(model.format.time(now))
                     .font(TypeScale.timeSmall)

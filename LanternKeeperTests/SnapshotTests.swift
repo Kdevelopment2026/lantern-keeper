@@ -26,6 +26,32 @@ final class SnapshotTests: XCTestCase {
         }
     }
 
+    /// Reduce Motion: the composed still state used instead of ambience and ignition.
+    func testSceneReduceMotion() {
+        for (name, state) in states {
+            assertSnapshot(
+                AnimatedLighthouseScene(state: state, reduceMotion: true)
+                    .ignoresSafeArea()
+                    .themed(state.themeVariant),
+                named: "scene-\(name)-reducemotion"
+            )
+        }
+    }
+
+    /// Standard motion: a fixed ambient frame and the ignition partway through.
+    func testSceneStandardMotionFrames() {
+        let ambient = LighthouseAmbience.frame(for: .watching(progress: 0.4), at: 4)
+        assertSnapshot(
+            LighthouseScene(state: .watching(progress: 0.4), frame: ambient).ignoresSafeArea().themed(.night),
+            named: "scene-watching-ambient"
+        )
+        let midway = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepStart - 0.3, ambient: ambient)
+        assertSnapshot(
+            LighthouseScene(state: .igniting, frame: midway).ignoresSafeArea().themed(.night),
+            named: "scene-igniting-midway"
+        )
+    }
+
     func testHarbourDefaultTextSize() throws {
         assertSnapshot(try harbour(.large), named: "harbour-large")
     }
@@ -40,7 +66,7 @@ final class SnapshotTests: XCTestCase {
             clock.advance(by: 3 * hour)
             guard case .active(let watch) = flow.screen else { return XCTFail("Expected active watch") }
             assertSnapshot(
-                ActiveWatchView(flow: flow, watch: watch).themed(.night).environment(\.dynamicTypeSize, size),
+                ActiveWatchView(flow: flow, watch: watch).environment(\.lighthouseAmbienceEnabled, false).themed(.night).environment(\.dynamicTypeSize, size),
                 named: "active-\(size == .large ? "large" : "accessibility3")"
             )
         }
@@ -53,7 +79,7 @@ final class SnapshotTests: XCTestCase {
             flow.refresh()
             guard case .ended(let ended) = flow.screen else { return XCTFail("Expected ended watch") }
             assertSnapshot(
-                WatchEndedView(flow: flow, ended: ended).themed(.dawn).environment(\.dynamicTypeSize, size),
+                WatchEndedView(flow: flow, ended: ended).environment(\.lighthouseAmbienceEnabled, false).themed(.dawn).environment(\.dynamicTypeSize, size),
                 named: "completed-\(size == .large ? "large" : "accessibility3")"
             )
         }
@@ -64,7 +90,7 @@ final class SnapshotTests: XCTestCase {
         clock.advance(by: 2 * hour + 15 * 60)
         flow.endEarly()
         guard case .ended(let ended) = flow.screen else { return XCTFail("Expected ended watch") }
-        assertSnapshot(WatchEndedView(flow: flow, ended: ended).themed(.night), named: "interrupted-large")
+        assertSnapshot(WatchEndedView(flow: flow, ended: ended).environment(\.lighthouseAmbienceEnabled, false).themed(.night), named: "interrupted-large")
     }
 
     // MARK: Builders
@@ -99,6 +125,7 @@ final class SnapshotTests: XCTestCase {
             format: WatchFormat(calendar: .london, locale: Locale(identifier: "en_GB"))
         )
         return HarbourView(model: model)
+            .environment(\.lighthouseAmbienceEnabled, false)
             .themed(.night)
             .environment(\.dynamicTypeSize, size)
             .preferredColorScheme(.dark)
