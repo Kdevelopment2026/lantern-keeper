@@ -139,7 +139,7 @@ platform :ios do
       configuration: "Release",
       export_method: "app-store",
       output_directory: BUILD_DIR,
-      output_name: "Lantern Keeper",
+      output_name: "LanternKeeper",
       xcargs: auth_args,
       export_options: {
         method: "app-store",
