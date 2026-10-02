@@ -340,6 +340,38 @@ platform :ios do
     UI.success("available in #{territories.count} territories, including new ones")
   end
 
+  desc "Set a one-off price for every territory from a GBP base price (PRICE=2.99 fastlane ios price)"
+  # Picks the GBR price point whose customer price matches PRICE and creates a
+  # price schedule with it; Apple equalises every other territory automatically.
+  lane :price do
+    require "spaceship"
+    authenticate
+    app = Spaceship::ConnectAPI::App.find(APP_BUNDLE_ID) || UI.user_error!("No app record")
+    wanted = ENV.fetch("PRICE", "2.99")
+    points = []
+    url = "/v1/apps/#{app.id}/appPricePoints?filter[territory]=GBR&limit=200"
+    loop do
+      page = asc(:get, url)
+      points.concat(page["data"])
+      nxt = page.dig("links", "next")
+      break unless nxt
+      url = nxt.sub("https://api.appstoreconnect.apple.com", "")
+    end
+    point = points.find { |pp| pp.dig("attributes", "customerPrice") == wanted } ||
+            UI.user_error!("No GBR price point for #{wanted}. Available: #{points.map { |pp| pp.dig('attributes', 'customerPrice') }.first(20).join(', ')}")
+    asc(:post, "/v1/appPriceSchedules", {
+      data: { type: "appPriceSchedules",
+              relationships: {
+                app: { data: { type: "apps", id: app.id } },
+                baseTerritory: { data: { type: "territories", id: "GBR" } },
+                manualPrices: { data: [{ type: "appPrices", id: "${price1}" }] }
+              } },
+      included: [{ type: "appPrices", id: "${price1}", attributes: { startDate: nil },
+                   relationships: { appPricePoint: { data: { type: "appPricePoints", id: point["id"] } } } }]
+    })
+    UI.success("price set: GBP #{wanted} (proceeds #{point.dig('attributes', 'proceeds')}), other territories equalised by Apple")
+  end
+
   desc "Read back the app price schedule and territory availability (read-only)"
   lane :price_check do
     require "spaceship"
