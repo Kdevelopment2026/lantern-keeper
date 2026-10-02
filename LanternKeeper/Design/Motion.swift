@@ -17,7 +17,7 @@ enum Motion {
 
     static let ignitionNightSettle: TimeInterval = 0.6
     static let ignitionLanternWarm: TimeInterval = 0.9
-    static let ignitionBeamSweep: TimeInterval = 1.6
+    static let ignitionBeamSweep: TimeInterval = 3.0
     static let ignitionControlsSettle: TimeInterval = 0.5
     static var ignitionTotal: TimeInterval {
         ignitionNightSettle + ignitionLanternWarm + ignitionBeamSweep + ignitionControlsSettle
@@ -28,13 +28,13 @@ enum Motion {
 
     // MARK: Ambience (foreground only)
 
-    /// Seconds for the beam to complete one slow sweep cycle.
-    static let beamSweepPeriod: TimeInterval = 16
-    /// Beam rest angle and sweep half-width, in degrees from horizontal (pointing left).
-    static let beamRestAngle: Double = 12
-    static let beamSweepAmplitude: Double = 10
+    /// Seconds for one full turn of the lens. Two opposite beams, so a flash every half turn.
+    static let beamRotationPeriod: TimeInterval = 12
+    /// Where the lens rests in the Reduce Motion still state: degrees around the lantern,
+    /// 0 = out to sea on the left, 90 = towards the viewer, 180 = right, 270 = behind.
+    static let beamRestHeading: Double = 25
     /// Seconds for the sea to drift one wavelength.
-    static let seaDriftPeriod: TimeInterval = 24
+    static let seaDriftPeriod: TimeInterval = 9
     /// Seconds for fog to cross the scene once.
-    static let fogDriftPeriod: TimeInterval = 90
+    static let fogDriftPeriod: TimeInterval = 45
 }

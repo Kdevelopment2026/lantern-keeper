@@ -63,13 +63,21 @@ final class WatchFormatTests: XCTestCase {
 
 final class LighthouseMotionTests: XCTestCase {
     func testAmbienceIsDeterministicAndBounded() {
-        for time in stride(from: 0.0, through: 120, by: 0.7) {
+        for time in stride(from: -5.0, through: 120, by: 0.7) {
             let frame = LighthouseAmbience.frame(for: .watching(progress: 0.5), at: time)
             XCTAssertEqual(frame, LighthouseAmbience.frame(for: .watching(progress: 0.5), at: time))
-            XCTAssertLessThanOrEqual(abs(frame.beamAngle - Motion.beamRestAngle), Motion.beamSweepAmplitude + 1e-9)
+            XCTAssertTrue((0..<360).contains(frame.beamHeading), "heading \(frame.beamHeading) at \(time)")
             XCTAssertTrue((0..<1).contains(frame.seaPhase))
             XCTAssertTrue((0..<1).contains(frame.fogOffset))
         }
+    }
+
+    func testLensTurnsAtConstantRate() {
+        let a = LighthouseAmbience.frame(for: .watching(progress: 0), at: 1).beamHeading
+        let b = LighthouseAmbience.frame(for: .watching(progress: 0), at: 2).beamHeading
+        XCTAssertEqual(b - a, 360 / Motion.beamRotationPeriod, accuracy: 1e-9)
+        let full = LighthouseAmbience.frame(for: .watching(progress: 0), at: Motion.beamRotationPeriod).beamHeading
+        XCTAssertEqual(full, 0, accuracy: 1e-9)
     }
 
     func testIdleAmbienceNeverLightsTheLantern() {
@@ -77,30 +85,34 @@ final class LighthouseMotionTests: XCTestCase {
             let frame = LighthouseAmbience.frame(for: .idle, at: time)
             XCTAssertEqual(frame.lanternIntensity, 0)
             XCTAssertEqual(frame.beamOpacity, 0)
+            XCTAssertEqual(frame.beamHeading, Motion.beamRestHeading)
         }
     }
 
-    func testIgnitionOrder() {
-        let ambient = LighthouseAmbience.frame(for: .watching(progress: 0), at: 0)
+    func testIgnitionOrderAndFirstFlash() {
+        func ambient(_ elapsed: TimeInterval) -> LighthouseFrame {
+            LighthouseAmbience.frame(for: .watching(progress: 0), at: IgnitionTimeline.ambientTime(elapsed: elapsed))
+        }
 
-        let start = IgnitionTimeline.frame(elapsed: 0, ambient: ambient)
+        let start = IgnitionTimeline.frame(elapsed: 0, ambient: ambient(0))
         XCTAssertEqual(start.nightDepth, 0)
         XCTAssertEqual(start.lanternIntensity, 0)
         XCTAssertEqual(start.beamOpacity, 0)
 
-        // Night settles before the lantern warms; the lantern is full before the sweep.
-        let settled = IgnitionTimeline.frame(elapsed: IgnitionTimeline.lanternStart, ambient: ambient)
+        // Night settles before the lantern warms; the lantern is full before the beam shows.
+        let settled = IgnitionTimeline.frame(elapsed: IgnitionTimeline.lanternStart, ambient: ambient(IgnitionTimeline.lanternStart))
         XCTAssertEqual(settled.nightDepth, 1, accuracy: 1e-9)
         XCTAssertEqual(settled.lanternIntensity, 0, accuracy: 1e-9)
 
-        let warmed = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepStart, ambient: ambient)
+        let warmed = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepStart, ambient: ambient(IgnitionTimeline.sweepStart))
         XCTAssertEqual(warmed.lanternIntensity, 1, accuracy: 1e-9)
         XCTAssertEqual(warmed.beamOpacity, 0, accuracy: 1e-9)
-        XCTAssertEqual(warmed.beamAngle, IgnitionTimeline.sweepStartAngle, accuracy: 1e-9)
+        XCTAssertEqual(warmed.beamHeading, IgnitionTimeline.sweepStartHeading, accuracy: 1e-9, "beam appears out to sea")
 
-        let done = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepEnd, ambient: ambient)
-        XCTAssertEqual(done.beamAngle, ambient.beamAngle, accuracy: 1e-9)
-        XCTAssertEqual(done.beamOpacity, ambient.beamOpacity, accuracy: 1e-9)
+        // The sweep ends on the first flash towards the viewer, and ambience continues from there.
+        let done = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepEnd, ambient: ambient(IgnitionTimeline.sweepEnd))
+        XCTAssertEqual(done.beamHeading, IgnitionTimeline.sweepEndHeading, accuracy: 1e-9)
+        XCTAssertEqual(done, ambient(IgnitionTimeline.sweepEnd))
         XCTAssertTrue(IgnitionTimeline.isComplete(elapsed: IgnitionTimeline.sweepEnd))
     }
 

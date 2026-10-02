@@ -43,9 +43,12 @@ struct AnimatedLighthouseScene: View {
     }
 
     private func composition(at date: Date) -> (LighthouseSceneState, LighthouseFrame) {
-        let ambient = LighthouseAmbience.frame(for: state, at: date.timeIntervalSinceReferenceDate)
-        guard let ignitionStart, state.isBeamVisible else { return (state, ambient) }
+        guard let ignitionStart, state.isBeamVisible else {
+            return (state, LighthouseAmbience.frame(for: state, at: date.timeIntervalSinceReferenceDate))
+        }
+        // After an ignition, ambient time keeps counting from the sweep so the lens never jumps.
         let elapsed = date.timeIntervalSince(ignitionStart)
+        let ambient = LighthouseAmbience.frame(for: state, at: IgnitionTimeline.ambientTime(elapsed: elapsed))
         guard !IgnitionTimeline.isComplete(elapsed: elapsed) else { return (state, ambient) }
         return (.igniting, IgnitionTimeline.frame(elapsed: elapsed, ambient: ambient))
     }

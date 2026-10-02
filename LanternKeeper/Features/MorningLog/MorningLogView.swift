@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// The result of a watch, stated plainly. The full morning log arrives in a later build.
-struct WatchEndedView: View {
+/// The result of a watch, stated plainly, then an optional reflection and note.
+struct MorningLogView: View {
     let flow: WatchFlowModel
     let ended: WatchFlowModel.EndedWatch
 
+    @State private var reflection: MorningReflection?
+    @State private var note = ""
+    @FocusState private var noteFocused: Bool
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -40,8 +43,37 @@ struct WatchEndedView: View {
             ))
             .accessibilityIdentifier("ended.duration")
 
-            PrimaryActionButton("Done", action: flow.dismissEnded)
-                .accessibilityIdentifier("ended.done")
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                Text("How do you feel this morning?")
+                    .font(TypeScale.body)
+                    .foregroundStyle(theme.primaryText)
+                    .accessibilityAddTraits(.isHeader)
+                ReflectionSelector(selection: $reflection)
+                TextField("Add a note (optional)", text: $note, axis: .vertical)
+                    .font(TypeScale.body)
+                    .foregroundStyle(theme.primaryText)
+                    .lineLimit(1...4)
+                    .padding(Spacing.s)
+                    .surface()
+                    .focused($noteFocused)
+                    .submitLabel(.done)
+                    .onSubmit { noteFocused = false }
+                    .accessibilityIdentifier("ended.note")
+            }
+
+            if let error = flow.saveError {
+                NoticeText(message: error)
+            }
+
+            PrimaryActionButton("Done") {
+                noteFocused = false
+                if reflection != nil || !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    flow.saveReflection(reflection, note: note, for: ended)
+                }
+                flow.dismissEnded()
+            }
+            .accessibilityIdentifier("ended.done")
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 }

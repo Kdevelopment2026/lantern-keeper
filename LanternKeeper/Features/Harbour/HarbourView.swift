@@ -5,6 +5,8 @@ struct HarbourView: View {
     let model: HarbourModel
     var onBegin: () -> Void = {}
     var onChangePlan: () -> Void = {}
+    var onOpenLogbook: () -> Void = {}
+    var onOpenSettings: () -> Void = {}
 
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -48,7 +50,21 @@ struct HarbourView: View {
                     action: onBegin
                 )
                 .accessibilityIdentifier("harbour.beginWatch")
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Spacing.l) { secondaryLinks }
+                    VStack(alignment: .leading, spacing: Spacing.xxs) { secondaryLinks }
+                }
             }
+        }
+    }
+
+    private var secondaryLinks: some View {
+        Group {
+            QuietActionButton("Open logbook", action: onOpenLogbook)
+                .accessibilityIdentifier("harbour.openLogbook")
+            QuietActionButton("Settings", action: onOpenSettings)
+                .accessibilityIdentifier("harbour.settings")
         }
     }
 }

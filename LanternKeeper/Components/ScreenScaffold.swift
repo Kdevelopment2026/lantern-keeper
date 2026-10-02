@@ -47,8 +47,8 @@ struct ScreenScaffold<Background: View, Top: View, Bottom: View>: View {
         } else {
             LinearGradient(
                 stops: [
-                    .init(color: theme.background.opacity(0), location: 0.45),
-                    .init(color: theme.background.opacity(0.8), location: 0.68),
+                    .init(color: theme.background.opacity(0), location: 0.38),
+                    .init(color: theme.background.opacity(0.8), location: 0.62),
                     .init(color: theme.background.opacity(0.92), location: 1),
                 ],
                 startPoint: .top,

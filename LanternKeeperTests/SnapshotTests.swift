@@ -40,12 +40,22 @@ final class SnapshotTests: XCTestCase {
 
     /// Standard motion: a fixed ambient frame and the ignition partway through.
     func testSceneStandardMotionFrames() {
-        let ambient = LighthouseAmbience.frame(for: .watching(progress: 0.4), at: 4)
+        // Beam sideways, beam flashing at the viewer, and the lantern warming before the beam.
+        let sideways = LighthouseAmbience.frame(for: .watching(progress: 0.4), at: 0)
         assertSnapshot(
-            LighthouseScene(state: .watching(progress: 0.4), frame: ambient).ignoresSafeArea().themed(.night),
+            LighthouseScene(state: .watching(progress: 0.4), frame: sideways).ignoresSafeArea().themed(.night),
             named: "scene-watching-ambient"
         )
-        let midway = IgnitionTimeline.frame(elapsed: IgnitionTimeline.sweepStart - 0.3, ambient: ambient)
+        let flash = LighthouseAmbience.frame(for: .watching(progress: 0.4), at: Motion.beamRotationPeriod / 4)
+        assertSnapshot(
+            LighthouseScene(state: .watching(progress: 0.4), frame: flash).ignoresSafeArea().themed(.night),
+            named: "scene-watching-flash"
+        )
+        let warming = IgnitionTimeline.sweepStart - 0.3
+        let midway = IgnitionTimeline.frame(
+            elapsed: warming,
+            ambient: LighthouseAmbience.frame(for: .watching(progress: 0), at: IgnitionTimeline.ambientTime(elapsed: warming))
+        )
         assertSnapshot(
             LighthouseScene(state: .igniting, frame: midway).ignoresSafeArea().themed(.night),
             named: "scene-igniting-midway"
@@ -79,8 +89,17 @@ final class SnapshotTests: XCTestCase {
             flow.refresh()
             guard case .ended(let ended) = flow.screen else { return XCTFail("Expected ended watch") }
             assertSnapshot(
-                WatchEndedView(flow: flow, ended: ended).environment(\.lighthouseAmbienceEnabled, false).themed(.dawn).environment(\.dynamicTypeSize, size),
+                MorningLogView(flow: flow, ended: ended).environment(\.lighthouseAmbienceEnabled, false).themed(.dawn).environment(\.dynamicTypeSize, size),
                 named: "completed-\(size == .large ? "large" : "accessibility3")"
+            )
+        }
+    }
+
+    func testOnboardingAtBothTextSizes() {
+        for size in [DynamicTypeSize.large, .accessibility3] {
+            assertSnapshot(
+                OnboardingView(onFinish: {}).environment(\.lighthouseAmbienceEnabled, false).themed(.night).environment(\.dynamicTypeSize, size),
+                named: "onboarding-\(size == .large ? "large" : "accessibility3")"
             )
         }
     }
@@ -90,7 +109,7 @@ final class SnapshotTests: XCTestCase {
         clock.advance(by: 2 * hour + 15 * 60)
         flow.endEarly()
         guard case .ended(let ended) = flow.screen else { return XCTFail("Expected ended watch") }
-        assertSnapshot(WatchEndedView(flow: flow, ended: ended).environment(\.lighthouseAmbienceEnabled, false).themed(.night), named: "interrupted-large")
+        assertSnapshot(MorningLogView(flow: flow, ended: ended).environment(\.lighthouseAmbienceEnabled, false).themed(.night), named: "interrupted-large")
     }
 
     // MARK: Builders

@@ -63,10 +63,14 @@ final class WatchFlowModel {
     /// Set when a watch has just begun and its ignition (and haptic) has not played yet.
     private(set) var ignitionPending = false
     var isPlanSheetPresented = false
+    var isLogbookPresented = false
+    var isSettingsPresented = false
+    private(set) var onboardingCompleted: Bool
+    private(set) var hapticsEnabled: Bool
 
     let harbour: HarbourModel
 
-    @ObservationIgnored private let store: WatchStore
+    @ObservationIgnored private let watchStore: WatchStore
     @ObservationIgnored private let clock: any Clock
     @ObservationIgnored private let preferences: any PreferencesStore
     @ObservationIgnored private let notifications: any NotificationService
@@ -85,7 +89,7 @@ final class WatchFlowModel {
         persistenceAvailable: Bool = true,
         announce: @escaping @MainActor (String) -> Void = WatchFlowModel.postAnnouncement
     ) {
-        self.store = store
+        self.watchStore = store
         self.clock = clock
         self.preferences = preferences
         self.notifications = notifications
@@ -93,7 +97,63 @@ final class WatchFlowModel {
         self.persistenceAvailable = persistenceAvailable
         self.announce = announce
         harbour = HarbourModel(clock: clock, preferences: preferences, format: format)
-        morningNotificationEnabled = preferences.load().morningNotificationEnabled
+        let stored = preferences.load()
+        morningNotificationEnabled = stored.morningNotificationEnabled
+        onboardingCompleted = stored.onboardingCompleted
+        hapticsEnabled = stored.hapticsEnabled
+    }
+
+    var versionDescription: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "0"
+        let build = info?["CFBundleVersion"] as? String ?? "0"
+        return "\(version) (\(build))"
+    }
+
+    func setHaptics(_ enabled: Bool) {
+        hapticsEnabled = enabled
+        var stored = preferences.load()
+        stored.hapticsEnabled = enabled
+        preferences.save(stored)
+        if enabled { haptics.play(.selection) }
+    }
+
+    /// Irreversible. Ended watches only; an active watch keeps running.
+    func deleteAllHistory() -> Bool {
+        do {
+            try watchStore.deleteAllHistory()
+            return true
+        } catch {
+            saveError = Copy.updateFailed
+            return false
+        }
+    }
+
+    func makeLogbook() -> LogbookModel {
+        LogbookModel(store: watchStore, clock: clock, format: format)
+    }
+
+    var store: WatchStore { watchStore }
+    var preferencesStore: any PreferencesStore { preferences }
+    var hapticsService: any HapticsService { haptics }
+    var notificationService: any NotificationService { notifications }
+
+    func completeOnboarding() {
+        onboardingCompleted = true
+        var stored = preferences.load()
+        stored.onboardingCompleted = true
+        preferences.save(stored)
+    }
+
+    /// Optional morning reflection and note for the watch just shown.
+    func saveReflection(_ reflection: MorningReflection?, note: String?, for ended: EndedWatch) {
+        do {
+            guard let session = try watchStore.session(id: ended.id) else { return }
+            try watchStore.updateReflection(reflection, note: note, for: session)
+            haptics.play(.selection)
+        } catch {
+            saveError = Copy.updateFailed
+        }
     }
 
     var now: Date { clock.now }
@@ -105,7 +165,7 @@ final class WatchFlowModel {
     /// active, and when a running watch reaches its end time.
     func refresh() {
         do {
-            switch try store.reconcile() {
+            switch try watchStore.reconcile() {
             case .noActiveWatch:
                 if case .active = screen { screen = .harbour }
             case .stillActive(let session):
@@ -142,7 +202,7 @@ final class WatchFlowModel {
             return
         }
         do {
-            let session = try store.begin(plan: harbour.plan)
+            let session = try watchStore.begin(plan: harbour.plan)
             harbour.choose(harbour.plan)
             saveError = nil
             screen = .active(ActiveWatch(session))
@@ -175,7 +235,7 @@ final class WatchFlowModel {
 
     func endEarly() {
         do {
-            let session = try store.interrupt()
+            let session = try watchStore.interrupt()
             notificationWork?.cancel()
             notifications.cancelWatchComplete()
             screen = .ended(EndedWatch(session))

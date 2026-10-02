@@ -15,6 +15,19 @@ struct WatchFormat: Sendable {
         ))
     }
 
+    /// Calendar day, e.g. "10 Jun 2026".
+    func day(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(
+            date: .abbreviated, time: .omitted,
+            locale: locale, calendar: calendar, timeZone: calendar.timeZone
+        ))
+    }
+
+    /// Short weekday, e.g. "Mon".
+    func weekday(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone).weekday(.abbreviated))
+    }
+
     /// Measured watch time, rounded down to the minute: "7 hr 42 min".
     func duration(_ interval: TimeInterval) -> String {
         format(minutes: Int64(max(0, interval) / 60), width: .abbreviated)

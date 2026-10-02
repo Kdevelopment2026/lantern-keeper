@@ -22,12 +22,27 @@ struct AppRootView: View {
 
     var body: some View {
         ZStack {
-            screen
-                .transition(.opacity)
+            if flow.onboardingCompleted {
+                screen
+                    .transition(.opacity)
+            } else {
+                OnboardingView(onFinish: flow.completeOnboarding)
+                    .themed(.night)
+                    .transition(.opacity)
+            }
         }
         .animation(Motion.stateChange(reduceMotion: reduceMotion), value: flow.screen)
+        .animation(Motion.stateChange(reduceMotion: reduceMotion), value: flow.onboardingCompleted)
         .sheet(isPresented: $flow.isPlanSheetPresented) {
             PlanSheet(flow: flow)
+                .themed(.night)
+        }
+        .sheet(isPresented: $flow.isLogbookPresented) {
+            LogbookView(model: flow.makeLogbook())
+                .themed(.night)
+        }
+        .sheet(isPresented: $flow.isSettingsPresented) {
+            SettingsView(flow: flow)
                 .themed(.night)
         }
         .preferredColorScheme(.dark)
@@ -44,7 +59,9 @@ struct AppRootView: View {
             HarbourView(
                 model: flow.harbour,
                 onBegin: flow.requestBegin,
-                onChangePlan: { flow.isPlanSheetPresented = true }
+                onChangePlan: { flow.isPlanSheetPresented = true },
+                onOpenLogbook: { flow.isLogbookPresented = true },
+                onOpenSettings: { flow.isSettingsPresented = true }
             )
             .themed(.night)
         case .prompt:
@@ -54,7 +71,7 @@ struct AppRootView: View {
             ActiveWatchView(flow: flow, watch: watch)
                 .themed(.night)
         case .ended(let ended):
-            WatchEndedView(flow: flow, ended: ended)
+            MorningLogView(flow: flow, ended: ended)
                 .themed(ended.completed ? .dawn : .night)
         }
     }

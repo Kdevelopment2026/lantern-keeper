@@ -40,6 +40,12 @@ final class WatchStore {
         try fetchActive().first
     }
 
+    func session(id: UUID) throws -> WatchSession? {
+        var descriptor = FetchDescriptor<WatchSession>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
     /// Ended watches, newest first.
     func logbook() throws -> [WatchSession] {
         let active = WatchStatus.active.rawValue

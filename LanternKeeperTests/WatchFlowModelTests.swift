@@ -212,6 +212,74 @@ final class WatchFlowModelTests: XCTestCase {
     }
 }
 
+@MainActor
+final class WatchFlowHistoryTests: XCTestCase {
+    private func makeFlow(preferences: InMemoryPreferencesStore = InMemoryPreferencesStore()) throws -> (WatchFlowModel, FixedClock, RecordingHapticsService) {
+        let clock = FixedClock(date("2026-06-10T22:42:00Z"))
+        let haptics = RecordingHapticsService()
+        let (store, _) = try makeStore(clock: clock)
+        let flow = WatchFlowModel(
+            store: store, clock: clock, preferences: preferences,
+            notifications: FakeNotificationService(), haptics: haptics,
+            format: WatchFormat(calendar: .london, locale: Locale(identifier: "en_GB")),
+            announce: { _ in }
+        )
+        return (flow, clock, haptics)
+    }
+
+    func testOnboardingShowsOnceAndIsRemembered() throws {
+        let preferences = InMemoryPreferencesStore()
+        let (flow, _, _) = try makeFlow(preferences: preferences)
+        XCTAssertFalse(flow.onboardingCompleted)
+
+        flow.completeOnboarding()
+
+        XCTAssertTrue(flow.onboardingCompleted)
+        let (again, _, _) = try makeFlow(preferences: preferences)
+        XCTAssertTrue(again.onboardingCompleted)
+    }
+
+    func testReflectionIsSavedWithoutChangingTimes() throws {
+        let (flow, clock, _) = try makeFlow()
+        flow.requestBegin()
+        flow.begin()
+        clock.advance(by: 9 * hour)
+        flow.refresh()
+        guard case .ended(let ended) = flow.screen else { return XCTFail("Expected ended") }
+
+        flow.saveReflection(.tired, note: " Slow start. ", for: ended)
+
+        let entry = try XCTUnwrap(flow.store.logbook().first)
+        XCTAssertEqual(entry.reflection, .tired)
+        XCTAssertEqual(entry.note, "Slow start.")
+        XCTAssertEqual(entry.measuredDuration, 8 * hour)
+    }
+
+    func testHapticsPreferenceIsRespected() throws {
+        let preferences = InMemoryPreferencesStore()
+        let (flow, _, _) = try makeFlow(preferences: preferences)
+        flow.setHaptics(false)
+        XCTAssertFalse(preferences.load().hapticsEnabled)
+        XCTAssertFalse(flow.hapticsEnabled)
+    }
+
+    func testDeleteAllHistoryKeepsActiveWatch() throws {
+        let (flow, clock, _) = try makeFlow()
+        flow.requestBegin()
+        flow.begin()
+        clock.advance(by: 9 * hour)
+        flow.refresh()
+        flow.dismissEnded()
+        flow.requestBegin()
+        flow.begin()
+
+        XCTAssertTrue(flow.deleteAllHistory())
+
+        XCTAssertTrue(try flow.store.logbook().isEmpty)
+        XCTAssertNotNil(try flow.store.activeWatch())
+    }
+}
+
 final class FaceDownDetectorTests: XCTestCase {
     func testRequiresSustainedFaceDown() {
         var detector = FaceDownDetector()
