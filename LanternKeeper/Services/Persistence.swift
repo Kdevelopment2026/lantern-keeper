@@ -10,8 +10,16 @@ enum Persistence {
         } else if let url {
             configuration = ModelConfiguration(schema: schema, url: url)
         } else {
-            configuration = ModelConfiguration(schema: schema)
+            configuration = ModelConfiguration(schema: schema, url: try defaultStoreURL())
         }
         return try ModelContainer(for: schema, configurations: [configuration])
+    }
+
+    /// `Application Support/LanternKeeper.store`, creating the directory on first launch.
+    static func defaultStoreURL() throws -> URL {
+        let directory = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        )
+        return directory.appendingPathComponent("LanternKeeper.store")
     }
 }
